@@ -4,17 +4,24 @@ import matplotlib.image as mpimg
 import numpy as np
 import time
 import cv2
-
-
+# from draw_matches import draw_matches
+from enum import Enum
 # parser = argparse.ArgumentParser(description='Code from AKAZE local features matching tutorial.')
 # parser.add_argument('--input1', help='Path to input image 1.', default='graf1.png')
 # parser.add_argument('--input2', help='Path to input image 2.', default='graf3.png')
 # parser.add_argument('--homography', help='Path to the homography matrix.', default='H1to3p.xml')
 # args = parser.parse_args()
 
+class DrawingType(Enum):
+    ONLY_LINES = 1
+    LINES_AND_POINTS = 2
+    COLOR_CODED_POINTS_X = 3
+    COLOR_CODED_POINTS_Y = 4
+    COLOR_CODED_POINTS_XpY = 5
+
 # Load grayscale images
-img1 = mpimg.imread(r"E:\xlq\PycharmProjects\LearnCV\TIFF_MATCH\images\DJI_20210803111145_0305_W-tryout1.jpg")
-img2 = mpimg.imread(r'E:\xlq\PycharmProjects\LearnCV\TIFF_MATCH\images\small_mosaic_module_1.jpg')
+img1 = mpimg.imread(r"E:\xlq\PycharmProjects\LearnCV\TIFF_MATCH\ImageRegistration\images\DJI_0452-tryout-defishr.jpg")
+img2 = mpimg.imread(r'E:\xlq\PycharmProjects\LearnCV\TIFF_MATCH\ImageRegistration\images\MOSAIC_YC.tif')
 
 #复制一些原图的副本，画图用
 img1_list = []
@@ -67,39 +74,38 @@ figure, ax = plt.subplots(1, 2, figsize=(20, 20),dpi=160)
 ax[0].imshow(img1_list[11])
 ax[1].imshow(img2_list[11])
 #第二个参数表示去掉多余空白位置
-# plt.savefig("./result/ORB+BEBLID_Extract.png", bbox_inches='tight')
+plt.savefig("./result/ORB+BEBLID_yc_Extract.png", bbox_inches='tight')
 plt.show()
 
-# 比率测试去除误匹配
-# matcher = cv2.DescriptorMatcher_create(cv2.DescriptorMatcher_BRUTEFORCE_HAMMING)
-# # 比率测试 KNNMatch，可设置K = 2 ，即对每个匹配返回两个最近邻描述符，仅当第一个匹配与第二个匹配之间的距离足够小时，才认为这是一个匹配
-# nn_matches = matcher.knnMatch(descriptors_1, descriptors_2, 2)
-# matched = []
-# nn_match_ratio = 0.8
-# for m, n in nn_matches:
-#     if m.distance < nn_match_ratio * n.distance:
-#         matched.append([m])
+descriptors_1 = np.asarray(descriptors_1, np.float32)
+descriptors_2 = np.asarray(descriptors_2, np.float32)
+# 排除错误匹配点
+FLANN_INDEX_KDTREE = 1
+index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+search_params = dict(checks=50)
+flann = cv2.FlannBasedMatcher(index_params, search_params)
+matches1 = flann.knnMatch(descriptors_1, descriptors_2, k=2)
+good_matches1 = []
+for m, n in matches1:
+    if m.distance < 0.7 * n.distance:
+        # if math.fabs(kps1[m.queryIdx].pt[1] - kps2[m.trainIdx].pt[1]) < 20 and math.fabs(kps1[m.queryIdx].pt[0] - kps2[m.trainIdx].pt[0]) < 60:
+        # 因为是双目摄像头，视差有一定的限制
+        good_matches1.append(m)
+
+good_matches2 = cv2.xfeatures2d.matchGMS((img1.shape[:2][::-1]), (img2.shape[:2][::-1]), keypoints_1, keypoints_2,
+                                         good_matches1)
+good_kps_l = [keypoints_1[m.queryIdx] for m in good_matches2]
+good_kps_r = [keypoints_2[m.trainIdx] for m in good_matches2]
+
+im = cv2.drawMatches(img1, keypoints_1, img2, keypoints_2, good_matches2, None)
+im = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
+cv2.imwrite('./result/show_match.jpg', im)
 
 
-#GMS去除误匹配
-matcher = cv2.BFMatcher(cv2.NORM_HAMMING)
-matches_all = matcher.match(descriptors_1, descriptors_2)
 
-start = time.time()
-matches_gms =cv2.xfeatures2d.matchGMS(img1_g.shape[:2], img2_g.shape[:2], keypoints_1, keypoints_2, matches_all, withScale=False, withRotation=False, thresholdFactor=6)
-end = time.time()
 
-print('Found', len(matches_gms), 'matches')
-print('GMS takes', end-start, 'seconds')
-
-# output = draw_matches(img1, img2, keypoints_1, keypoints_2, matches_gms, DrawingType.ONLY_LINES)
-
-matched = matches_gms
 img3 = cv2.drawMatchesKnn(img1_list[11],keypoints_1,img2_list[11],keypoints_2,matched,None,flags=2)
-plt.figure(figsize=(20,20),dpi=160);
-plt.imshow(img3)
-# plt.savefig("./result/ORB_AND_BEBLID_Match.png", bbox_inches='tight')
-plt.show()
+
 
 #获取两个图对应的特征点
 ptsA= np.float32([keypoints_1[m[0].queryIdx].pt for m in matched]).reshape(-1,1,2)
