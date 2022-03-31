@@ -1,11 +1,24 @@
 from osgeo import osr,gdal
 
-infile = "./images/MOSAIC_YC.tif'" #File Path goes here
+infile = "./images/MOSAIC_YC.tif" #File Path goes here
 #Lat Long value
-long = 102.30131411
-lat =  38.25965909
+long = 102.30101606557373
+lat =  38.259530498231456
 
 indataset = gdal.Open(infile)
+gt = indataset.GetGeoTransform()
+
+
+#像素坐标转换为地理空间坐标系
+# col = 996.5
+# row = 782
+# x = (col * gt[1]) + gt[0]
+# y = (row * gt[5]) + gt[3]
+# 地理空间坐标系转换为像素坐标
+x = 263853.4085
+y = 4238056.654
+col = int((x - gt[0]) / gt[1])
+row = int((y - gt[3]) / gt[5])
 wgs84_wkt = """
     GEOGCS["WGS 84",
         DATUM["WGS_1984",
