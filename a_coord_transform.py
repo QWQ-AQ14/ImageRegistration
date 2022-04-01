@@ -1,16 +1,15 @@
-import gdal
-from osgeo import osr
+from osgeo import gdal,osr
 from exif import Image
-
 def lonlat2pixel(ds,lon,lat):
-    # 获取GDAL仿射矩阵
+    # 创建目标空间参考
     srs = osr.SpatialReference()
     srs.ImportFromWkt(ds.GetProjection())
     srsLatLong = srs.CloneGeogCS()
     ct = osr.CoordinateTransformation(srsLatLong, srs)
     gt = ds.GetGeoTransform()
     # x = 263853.4085 y = 4238056.654 通过经纬度获取地理空间坐标
-    (X, Y, height) = ct.TransformPoint(lon, lat)
+    # GDA3.0以后TransformPoint的参数为（lat, lon）而不是（lon, lat）
+    (X, Y, height) = ct.TransformPoint(lat, lon)
     inv_geometrix = gdal.InvGeoTransform(gt)
     # 获得像素值坐标
     x = int(inv_geometrix[0] + inv_geometrix[1] * X + inv_geometrix[2] * Y)
@@ -109,14 +108,20 @@ def image_coordinates(img_path):
     return coords
 
 if __name__ == "__main__":
+    # 整图
     img1_path = './images/GS.tif'
+    # 单幅图
+    img2_path = './images/DJI_20210803111145_0305_W.JPG'
     # Open tif file
     ds = gdal.Open(img1_path)
-    lon,lat = pixel2latlon(ds,996.5,782)
-    x,y = lonlat2pixel(ds,102.30101606557373,38.259530498231456)
+    #获取单幅图的经纬度信息
+    lat_lon = image_coordinates(img2_path)
+    # lon,lat = pixel2latlon(ds,996.5,782)
+    # lat_lon = [40.49348002,95.70736002]
+    x,y = lonlat2pixel(ds,lat_lon[1],lat_lon[0])
     # 中心点坐标 x = 263853.4085 y = 4238056.654
-    (upper_left_geo_x, upper_left_geo_y, lower_right_geo_x, lower_right_geo_y) = center_point_four(ds,996.5,782,500)
+    (upper_left_geo_x, upper_left_geo_y, lower_right_geo_x, lower_right_geo_y) = center_point_four(ds,x,y,2000)
     window =(upper_left_geo_x, upper_left_geo_y, lower_right_geo_x, lower_right_geo_y)
     #根据地理空间坐标裁剪出对应区域
-    gdal.Translate('output_crop_raster.tif', './images/MOSAIC_YC.tif', projWin=window)
-    print(lat,lon)
+    gdal.Translate('output_crop_raster.tif', './images/GS.tif', projWin=window)
+    print(lat_lon)
