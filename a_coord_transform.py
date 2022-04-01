@@ -28,7 +28,6 @@ def pixel2latlon(ds,x,y):
          y: Pixel y coordinates. For example, if numpy array, this is the row index
        """
 
-
     old_cs = osr.SpatialReference()
     old_cs.ImportFromWkt(ds.GetProjectionRef())
 
@@ -63,10 +62,36 @@ def pixel2latlon(ds,x,y):
 
     return (lat,lon)
 
+def pixel2geocoord(ds,pixel_x,pixel_y):
+    gt = ds.GetGeoTransform()
+    # 像素坐标转换为地理空间坐标系
+    # col = 996.5
+    # row = 782
+    geo_x = (pixel_x * gt[1]) + gt[0]
+    geo_y = (pixel_y * gt[5]) + gt[3]
+    return (geo_x,geo_y)
+def center_point_four(ds,center_x,center_y,offset):
+    #offset 需要裁剪的偏移量
+    # 输入像素点中心坐标
+    upper_left_x = center_x - offset
+    upper_left_y = center_y - offset
+    lower_right_x = center_x + offset
+    lower_right_y = center_y + offset
+    (upper_left_geo_x, upper_left_geo_y) = pixel2geocoord(ds,upper_left_x,upper_left_y)
+    (lower_right_geo_x, lower_right_geo_y) = pixel2geocoord(ds, lower_right_x, lower_right_y)
+    return (upper_left_geo_x, upper_left_geo_y,lower_right_geo_x, lower_right_geo_y)
+
+
+
 if __name__ == "__main__":
     img1_path = './images/MOSAIC_YC.tif'
     # Open tif file
     ds = gdal.Open(img1_path)
     lon,lat = pixel2latlon(ds,996.5,782)
     x,y = lonlat2pixel(ds,102.30101606557373,38.259530498231456)
+    # 中心点坐标 x = 263853.4085 y = 4238056.654
+    (upper_left_geo_x, upper_left_geo_y, lower_right_geo_x, lower_right_geo_y) = center_point_four(ds,996.5,782,500)
+    window =(upper_left_geo_x, upper_left_geo_y, lower_right_geo_x, lower_right_geo_y)
+    #根据地理空间坐标裁剪出对应区域
+    gdal.Translate('output_crop_raster.tif', './images/MOSAIC_YC.tif', projWin=window)
     print(lat,lon)
