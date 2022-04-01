@@ -1,5 +1,6 @@
 import gdal
 from osgeo import osr
+from exif import Image
 
 def lonlat2pixel(ds,lon,lat):
     # 获取GDAL仿射矩阵
@@ -81,10 +82,34 @@ def center_point_four(ds,center_x,center_y,offset):
     (lower_right_geo_x, lower_right_geo_y) = pixel2geocoord(ds, lower_right_x, lower_right_y)
     return (upper_left_geo_x, upper_left_geo_y,lower_right_geo_x, lower_right_geo_y)
 
+#将经纬度信息转换为小数点形式
+def decimal_coords(coords, ref):
+ decimal_degrees = coords[0] + coords[1] / 60 + coords[2] / 3600
+ if ref == "S" or ref == "W":
+     decimal_degrees = -decimal_degrees
+ return decimal_degrees
 
+# 读取图片
+def image_coordinates(img_path):
+    with open(img_path, 'rb') as src:
+        img = Image(src)
+    if img.has_exif:
+        try:
+            img.gps_longitude
+            coords = (decimal_coords(img.gps_latitude,
+                      img.gps_latitude_ref),
+                      decimal_coords(img.gps_longitude,
+                      img.gps_longitude_ref))
+        except AttributeError:
+            print( 'No Coordinates')
+    else:
+        print( 'The Image has no EXIF information')
+    print(f"Image {src.name}, OS Version:{img.get('software', 'Not Known')} ------")
+    print(f"Was taken: {img.datetime_original}, and has coordinates:{coords}")
+    return coords
 
 if __name__ == "__main__":
-    img1_path = './images/MOSAIC_YC.tif'
+    img1_path = './images/GS.tif'
     # Open tif file
     ds = gdal.Open(img1_path)
     lon,lat = pixel2latlon(ds,996.5,782)
