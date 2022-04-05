@@ -4,7 +4,7 @@ import math
 import numpy as np
 if __name__ == "__main__":
     #读取两张图像
-    img1_path = './images/DJI_20210803111144_0305_T.JPG'
+    img1_path = './images/DJI_20210803111304_0324_T.JPG'
     img2_path = './images/DJI_20210803111305_0324_W.JPG'
     img1 = cv2.imread(img1_path)
     img2 = cv2.imread(img2_path)
@@ -16,7 +16,7 @@ if __name__ == "__main__":
     #每个像素对应的地面距离
     #传感器宽度 像元间距 * 图像宽度 单位是mm
     sendor_w = 12  * img1_exif.pixel_x_dimension / 1000
-    h = 60 #相对高度 单位m
+    h = 65 #相对高度 单位m
     #地面分辨率 m/pixel
     gsd = (sendor_w * h * 100) / (img1_exif.focal_length * img1_exif.pixel_x_dimension)
     print(gsd)
@@ -35,3 +35,4 @@ if __name__ == "__main__":
     # 经度
     lon = coords1[1] + sub[0] / 23.6/3600
     print(lat,lon)
+    print(lat - coords1[0],lon - coords1[1])
