@@ -6,8 +6,9 @@ import discorpy.prep.preprocessing as prep
 import discorpy.proc.processing as proc
 import discorpy.post.postprocessing as post
 import discorpy.prep.linepattern as lprep
+import scipy.ndimage as ndi
 
-#加载图像
+#加载图像 创建用于视觉检查的线条图案
 # Initial parameters
 file_path = "./images/DJI_20210803111219_0313_W.JPG"
 output_base = "./correct_image/"
@@ -15,61 +16,110 @@ num_coef = 5  # Number of polynomial coefficients
 mat0 = io.load_image(file_path) # Load image
 (height, width) = mat0.shape
 
-print("2-> Calculate slope and distance between lines!!!")
-slope_hor, dist_hor = lprep.calc_slope_distance_hor_lines(mat0)
-slope_ver, dist_ver = lprep.calc_slope_distance_ver_lines(mat0)
-print("    Horizontal slope: ", slope_hor, " Distance: ", dist_hor)
-print("    Vertical slope: ", slope_ver, " Distance: ", dist_ver)
+# Create a line-pattern image
+line_pattern = np.zeros((height, width), dtype=np.float32)
+for i in range(50, height - 50, 40):
+    line_pattern[i - 2:i + 3] = 1.0
 
-print("3-> Extract reference-points !!!!")
-list_points_hor_lines = lprep.get_cross_points_hor_lines(mat0, slope_ver, dist_ver, ratio=0.5, sensitive=0.1)
-list_points_ver_lines = lprep.get_cross_points_ver_lines(mat0, slope_hor, dist_hor, ratio=0.5, sensitive=0.1)
-io.save_plot_points(output_base + "/extracted_hor_points.png", list_points_hor_lines, height, width)
-io.save_plot_points(output_base + "/extracted_ver_points.png", list_points_ver_lines, height, width)
+# Estimate parameters by visual inspection:
+# Coarse estimation
+xcenter = width // 2
+ycenter = height // 2
+list_power = np.asarray([1.0, 10**(-4), 10**(-7), 10**(-10), 10**(-13)])
+list_coef = np.asarray([1.0, 1.0, 1.0, 1.0, 1.0])
 
-print("4-> Group points into lines !!!!")
-list_hor_lines = prep.group_dots_hor_lines(list_points_hor_lines, slope_hor, dist_hor)
-list_ver_lines = prep.group_dots_ver_lines(list_points_ver_lines, slope_ver, dist_ver)
-# Optional: remove residual dots
-list_hor_lines = prep.remove_residual_dots_hor(list_hor_lines, slope_hor, 2.0)
-list_ver_lines = prep.remove_residual_dots_ver(list_ver_lines, slope_ver, 2.0)
-io.save_plot_image(output_base + "/grouped_hor_lines.png", list_hor_lines, height, width)
-io.save_plot_image(output_base + "/grouped_ver_lines.png", list_ver_lines, height, width)
+# Rotate the line-pattern image if need to
+angle = 2.0 # Degree
+pad = width // 2 # Need padding as lines are shrunk after warping.
+mat_pad = np.pad(line_pattern, pad, mode='edge')
+mat_pad = ndi.rotate(mat_pad, angle, reshape=False)
 
-print("5-> Correct perspective effect !!!!")
-# Optional: correct perspective effect.
-list_hor_lines, list_ver_lines = proc.regenerate_grid_points_parabola(
-    list_hor_lines, list_ver_lines, perspective=True)
+# Define scanning routines
+def scan_coef(idx, start, stop, step, list_coef, list_power, output_base, mat0,
+              mat_pad, pad, ntime=1):
+    (height, width) = mat0.shape
+    for num in np.arange(start, stop + step, step):
+        list_coef_est = np.copy(list_coef)
+        list_coef_est[idx] = list_coef_est[idx] + num
+        list_ffact = list_power * list_coef_est
+        line_img_warped = post.unwarp_image_backward(mat_pad, xcenter + pad,
+                                                     ycenter + pad, list_ffact)
+        line_img_warped = line_img_warped[pad:pad + height, pad:pad + width]
+        name = ("0000" + str(list_coef_est[idx]))[-5:]
+        io.save_image(output_base + "/coef_" + str(idx) + "_ntime_" + str(
+            ntime) + "/img_" + name + ".jpg", mat0 + 0.5 * line_img_warped)
 
-# Check if the distortion is significant.
-list_hor_data = post.calc_residual_hor(list_hor_lines, 0.0, 0.0)
-io.save_residual_plot(output_base + "/residual_horizontal_points_before.png",
-                      list_hor_data, height, width)
-list_ver_data = post.calc_residual_ver(list_ver_lines, 0.0, 0.0)
-io.save_residual_plot(output_base + "/residual_vertical_points_before.png",
-                      list_ver_data, height, width)
+def scan_center(xcenter, ycenter, start, stop, step, list_coef, list_power,
+                output_base, mat0, mat_pad, pad, axis="x", ntime=1):
+    (height, width) = mat0.shape
+    list_ffact = list_power * list_coef
+    if axis == "x":
+        for num in np.arange(start, stop + step, step):
+            line_img_warped = post.unwarp_image_backward(mat_pad,
+                                                         xcenter + num + pad,
+                                                         ycenter + pad,
+                                                         list_ffact)
+            line_img_warped = line_img_warped[pad:pad + height, pad:pad + width]
+            name = ("0000" + str(xcenter + num))[-7:]
+            io.save_image(output_base + "/xcenter_ntime_" + str(
+                ntime) + "/img_" + name + ".jpg", mat0 + 0.5 * line_img_warped)
+    else:
+        for num in range(start, stop + step, step):
+            line_img_warped = post.unwarp_image_backward(mat_pad, xcenter + pad,
+                                                         ycenter + num + pad,
+                                                         list_ffact)
+            line_img_warped = line_img_warped[pad:pad + height, pad:pad + width]
+            name = ("0000" + str(ycenter + num))[-7:]
+            io.save_image(output_base + "/ycenter_ntime_" + str(
+                ntime) + "/img_" + name + ".jpg", mat0 + 0.5 * line_img_warped)
 
-print("6-> Calculate the centre of distortion !!!!")
-(xcenter, ycenter) = proc.find_cod_coarse(list_hor_lines, list_ver_lines)
-print("   X-center: {0}, Y-center: {1}".format(xcenter, ycenter))
 
-print("7-> Calculate radial distortion coefficients !!!!")
-list_fact = proc.calc_coef_backward(list_hor_lines, list_ver_lines, xcenter,
-                                    ycenter, num_coef)
+## Scan the 4th coefficient
+scan_coef(4, 0, 30, 1, list_coef, list_power, output_base, mat0, mat_pad, pad)
+## The value of 24.0 is good, update the 4th coefficient.
+list_coef[4] = 24.0
 
-# Check the correction results
-list_uhor_lines = post.unwarp_line_backward(list_hor_lines, xcenter, ycenter, list_fact)
-list_uver_lines = post.unwarp_line_backward(list_ver_lines, xcenter, ycenter, list_fact)
-list_hor_data = post.calc_residual_hor(list_uhor_lines, xcenter, ycenter)
-list_ver_data = post.calc_residual_ver(list_uver_lines, xcenter, ycenter)
-io.save_residual_plot(output_base + "/residual_horizontal_points_after.png",
-                      list_hor_data, height, width)
-io.save_residual_plot(output_base + "/residual_vertical_points_after.png",
-                      list_ver_data, height, width)
-# Output
-print("8-> Apply correction to image !!!!")
-corrected_mat = post.unwarp_image_backward(mat0, xcenter, ycenter, list_fact)
-io.save_image(output_base + "/corrected_image.tif", corrected_mat)
-io.save_metadata_txt(output_base + "/coefficients.txt", xcenter, ycenter, list_fact)
-io.save_image(output_base + "/difference.tif", mat0 - corrected_mat)
-print("!!! Done !!!!")
+## Scan the 3rd coefficient
+scan_coef(3, 0, 10, 1, list_coef, list_power, output_base, mat0, mat_pad, pad)
+## The value of 2.0 is good, update the 3rd coefficient.
+list_coef[3] = 2.0
+
+## Scan the 2nd coefficient
+scan_coef(2, 0, 10, 1, list_coef, list_power, output_base, mat0, mat_pad, pad)
+## The value of 5.0 is good, update the 2nd coefficient.
+list_coef[2] = 5.0
+
+## Scan the x-center
+scan_center(xcenter, ycenter, -50, 50, 2, list_coef, list_power, output_base,
+            mat0, mat_pad, pad, axis="x")
+## Found x=648 looks good.
+xcenter = 646
+
+## Scan the y-center
+scan_center(xcenter, ycenter, -50, 50, 2, list_coef, list_power, output_base,
+            mat0, mat_pad, pad, axis="y")
+## Found y=480 looks good.
+ycenter = 480
+
+# Adjust the 1st-order and 0-order coefficients manually if need to.
+list_coef[1] = 1.0
+list_coef[0] = 1.0
+
+# Get a good estimation of the forward model
+list_ffact = list_coef * list_power
+# Transform to the backward model for correction
+ref_points = [[i - ycenter, j - xcenter] for i in range(0, height, 50) for j in
+              range(0, width, 50)]
+list_bfact = proc.transform_coef_backward_and_forward(list_ffact, ref_points=ref_points)
+
+# Load the color image
+img = io.load_image(file_path, average=False)
+img_corrected = np.copy(img)
+
+# Unwarped each color channel of the image
+for i in range(img.shape[-1]):
+    img_corrected[:, :, i] = post.unwarp_image_backward(img[:, :, i], xcenter,
+                                                        ycenter, list_bfact)
+
+# Save the unwarped image.
+io.save_image(output_base + "/F_R_hazcam_unwarped.png", img_corrected)
