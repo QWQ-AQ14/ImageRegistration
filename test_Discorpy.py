@@ -16,110 +16,139 @@ num_coef = 5  # Number of polynomial coefficients
 mat0 = io.load_image(file_path) # Load image
 (height, width) = mat0.shape
 
-# Create a line-pattern image
-line_pattern = np.zeros((height, width), dtype=np.float32)
-for i in range(50, height - 50, 40):
-    line_pattern[i - 2:i + 3] = 1.0
+# Normalize background
+mat1 = prep.normalization_fft(mat0, sigma=20)
+# Segment dots
+threshold = prep.calculate_threshold(mat1, bgr="bright", snr=1.5)
+mat1 = prep.binarization(mat1, thres=threshold)
+io.save_image(output_base + "/segmented_dots.jpg", mat1)
 
-# Estimate parameters by visual inspection:
-# Coarse estimation
-xcenter = width // 2
-ycenter = height // 2
-list_power = np.asarray([1.0, 10**(-4), 10**(-7), 10**(-10), 10**(-13)])
-list_coef = np.asarray([1.0, 1.0, 1.0, 1.0, 1.0])
+# Calculate the median dot size and distance between them.
+(dot_size, dot_dist) = prep.calc_size_distance(mat1)
+# Calculate the slopes of horizontal lines and vertical lines.
+hor_slope = prep.calc_hor_slope(mat1)
+ver_slope = prep.calc_ver_slope(mat1)
+print("Horizontal slope: {0}. Vertical slope: {1}".format(hor_slope, ver_slope))
 
-# Rotate the line-pattern image if need to
-angle = 2.0 # Degree
-pad = width // 2 # Need padding as lines are shrunk after warping.
-mat_pad = np.pad(line_pattern, pad, mode='edge')
-mat_pad = ndi.rotate(mat_pad, angle, reshape=False)
+# Group dots into lines.
+list_hor_lines0 = prep.group_dots_hor_lines(mat1, hor_slope, dot_dist,
+                                            ratio=0.3, num_dot_miss=2,
+                                            accepted_ratio=0.6)
+list_ver_lines0 = prep.group_dots_ver_lines(mat1, ver_slope, dot_dist,
+                                            ratio=0.3, num_dot_miss=2,
+                                            accepted_ratio=0.6)
 
-# Define scanning routines
-def scan_coef(idx, start, stop, step, list_coef, list_power, output_base, mat0,
-              mat_pad, pad, ntime=1):
-    (height, width) = mat0.shape
-    for num in np.arange(start, stop + step, step):
-        list_coef_est = np.copy(list_coef)
-        list_coef_est[idx] = list_coef_est[idx] + num
-        list_ffact = list_power * list_coef_est
-        line_img_warped = post.unwarp_image_backward(mat_pad, xcenter + pad,
-                                                     ycenter + pad, list_ffact)
-        line_img_warped = line_img_warped[pad:pad + height, pad:pad + width]
-        name = ("0000" + str(list_coef_est[idx]))[-5:]
-        io.save_image(output_base + "/coef_" + str(idx) + "_ntime_" + str(
-            ntime) + "/img_" + name + ".jpg", mat0 + 0.5 * line_img_warped)
+# Save output for checking
+io.save_plot_image(output_base + "/horizontal_lines.png", list_hor_lines0, height, width)
+io.save_plot_image(output_base + "/vertical_lines.png", list_ver_lines0, height, width)
+list_hor_data = post.calc_residual_hor(list_hor_lines0, 0.0, 0.0)
+list_ver_data = post.calc_residual_ver(list_ver_lines0, 0.0, 0.0)
+io.save_residual_plot(output_base + "/hor_residual_before_correction.png", list_hor_data,
+                      height, width)
+io.save_residual_plot(output_base + "/ver_residual_before_correction.png", list_ver_data,
+                      height, width)
 
-def scan_center(xcenter, ycenter, start, stop, step, list_coef, list_power,
-                output_base, mat0, mat_pad, pad, axis="x", ntime=1):
-    (height, width) = mat0.shape
-    list_ffact = list_power * list_coef
-    if axis == "x":
-        for num in np.arange(start, stop + step, step):
-            line_img_warped = post.unwarp_image_backward(mat_pad,
-                                                         xcenter + num + pad,
-                                                         ycenter + pad,
-                                                         list_ffact)
-            line_img_warped = line_img_warped[pad:pad + height, pad:pad + width]
-            name = ("0000" + str(xcenter + num))[-7:]
-            io.save_image(output_base + "/xcenter_ntime_" + str(
-                ntime) + "/img_" + name + ".jpg", mat0 + 0.5 * line_img_warped)
-    else:
-        for num in range(start, stop + step, step):
-            line_img_warped = post.unwarp_image_backward(mat_pad, xcenter + pad,
-                                                         ycenter + num + pad,
-                                                         list_ffact)
-            line_img_warped = line_img_warped[pad:pad + height, pad:pad + width]
-            name = ("0000" + str(ycenter + num))[-7:]
-            io.save_image(output_base + "/ycenter_ntime_" + str(
-                ntime) + "/img_" + name + ".jpg", mat0 + 0.5 * line_img_warped)
+# Optional: for checking perspective distortion
+(xcen_tmp, ycen_tmp) = proc.find_cod_bailey(list_hor_lines0, list_ver_lines0)
+list_hor_coef = proc._para_fit_hor(list_hor_lines0, xcen_tmp, ycen_tmp)[0]
+list_ver_coef = proc._para_fit_ver(list_ver_lines0, xcen_tmp, ycen_tmp)[0]
+# Optional: plot the results
+plt.figure(0)
+plt.plot(list_hor_coef[:, 2], list_hor_coef[:, 0], "-o")
+plt.plot(list_ver_coef[:, 2], list_ver_coef[:, 0], "-o")
+plt.xlabel("c-coefficient")
+plt.ylabel("a-coefficient")
 
+plt.figure(1)
+plt.plot(list_hor_coef[:, 2], -list_hor_coef[:, 1], "-o")
+plt.plot(list_ver_coef[:, 2], list_ver_coef[:, 1], "-o")
+plt.xlabel("c-coefficient")
+plt.ylabel("b-coefficient")
+plt.show()
+# Optional: correct parabola coefficients
+hor_coef_corr, ver_coef_corr = proc._generate_non_perspective_parabola_coef(
+    list_hor_lines0, list_ver_lines0)[0:2]
+# Optional: plot to check the results
+plt.figure(0)
+plt.plot(hor_coef_corr[:, 2], hor_coef_corr[:, 0], "-o")
+plt.plot(ver_coef_corr[:, 2], ver_coef_corr[:, 0], "-o")
+plt.xlabel("c-coefficient")
+plt.ylabel("a-coefficient")
+plt.figure(1)
+plt.plot(hor_coef_corr[:, 2], -hor_coef_corr[:, 1], "-o")
+plt.plot(ver_coef_corr[:, 2], ver_coef_corr[:, 1], "-o")
+plt.xlabel("c-coefficient")
+plt.ylabel("b-coefficient")
+plt.show()
 
-## Scan the 4th coefficient
-scan_coef(4, 0, 30, 1, list_coef, list_power, output_base, mat0, mat_pad, pad)
-## The value of 24.0 is good, update the 4th coefficient.
-list_coef[4] = 24.0
+# Regenerate grid points with the correction of perspective effect.
+list_hor_lines1, list_ver_lines1 = proc.regenerate_grid_points_parabola(
+    list_hor_lines0, list_ver_lines0, perspective=True)
 
-## Scan the 3rd coefficient
-scan_coef(3, 0, 10, 1, list_coef, list_power, output_base, mat0, mat_pad, pad)
-## The value of 2.0 is good, update the 3rd coefficient.
-list_coef[3] = 2.0
+# Save output for checking
+io.save_plot_image(output_base + "/horizontal_lines_regenerated.png",
+                   list_hor_lines1, height, width)
+io.save_plot_image(output_base + "/vertical_lines_regenerated.png",
+                   list_ver_lines1, height, width)
 
-## Scan the 2nd coefficient
-scan_coef(2, 0, 10, 1, list_coef, list_power, output_base, mat0, mat_pad, pad)
-## The value of 5.0 is good, update the 2nd coefficient.
-list_coef[2] = 5.0
+# Calculate parameters of the radial correction model
+(xcenter, ycenter) = proc.find_cod_coarse(list_hor_lines1, list_ver_lines1)
+list_fact = proc.calc_coef_backward(list_hor_lines1, list_ver_lines1,
+                                    xcenter, ycenter, num_coef)
+io.save_metadata_txt(output_base + "/coefficients_radial_distortion.txt",
+                     xcenter, ycenter, list_fact)
+print("X-center: {0}. Y-center: {1}".format(xcenter, ycenter))
+print("Coefficients: {0}".format(list_fact))
 
-## Scan the x-center
-scan_center(xcenter, ycenter, -50, 50, 2, list_coef, list_power, output_base,
-            mat0, mat_pad, pad, axis="x")
-## Found x=648 looks good.
-xcenter = 646
+# Regenerate the lines without perspective correction for later use.
+list_hor_lines2, list_ver_lines2 = proc.regenerate_grid_points_parabola(
+    list_hor_lines0, list_ver_lines0, perspective=False)
 
-## Scan the y-center
-scan_center(xcenter, ycenter, -50, 50, 2, list_coef, list_power, output_base,
-            mat0, mat_pad, pad, axis="y")
-## Found y=480 looks good.
-ycenter = 480
+# Unwarp lines using the backward model:
+list_uhor_lines = post.unwarp_line_backward(list_hor_lines2, xcenter, ycenter, list_fact)
+list_uver_lines = post.unwarp_line_backward(list_ver_lines2, xcenter, ycenter, list_fact)
 
-# Adjust the 1st-order and 0-order coefficients manually if need to.
-list_coef[1] = 1.0
-list_coef[0] = 1.0
+# Optional: unwarp lines using the forward model. Note that unwarping lines
+# using the backward model is based on optimization (https://zenodo.org/record/1322720)
+# which may result in strong fluctuation if lines are strongly curved. In such case,
+# using the forward model is more reliable.
 
-# Get a good estimation of the forward model
-list_ffact = list_coef * list_power
-# Transform to the backward model for correction
-ref_points = [[i - ycenter, j - xcenter] for i in range(0, height, 50) for j in
-              range(0, width, 50)]
-list_bfact = proc.transform_coef_backward_and_forward(list_ffact, ref_points=ref_points)
+# list_ffact = proc.calc_coef_forward(list_hor_lines1, list_ver_lines1,
+#                                     xcenter, ycenter, num_coef)
+# list_uhor_lines = post.unwarp_line_forward(list_hor_lines2, xcenter, ycenter,
+#                                            list_ffact)
+# list_uver_lines = post.unwarp_line_forward(list_ver_lines2, xcenter, ycenter,
+#                                            list_ffact)
 
-# Load the color image
-img = io.load_image(file_path, average=False)
-img_corrected = np.copy(img)
+# Check the residual of unwarped lines:
+list_hor_data = post.calc_residual_hor(list_uhor_lines, xcenter, ycenter)
+list_ver_data = post.calc_residual_ver(list_uver_lines, xcenter, ycenter)
+io.save_residual_plot(output_base + "/hor_residual_after_correction.png", list_hor_data, height, width)
+io.save_residual_plot(output_base + "/ver_residual_after_correction.png", list_ver_data, height, width)
 
-# Unwarped each color channel of the image
-for i in range(img.shape[-1]):
-    img_corrected[:, :, i] = post.unwarp_image_backward(img[:, :, i], xcenter,
-                                                        ycenter, list_bfact)
+# Unwarp the image
+mat_rad_corr = post.unwarp_image_backward(mat0, xcenter, ycenter, list_fact)
+# Save results
+io.save_image(output_base + "/image_radial_corrected.jpg", mat_rad_corr)
+io.save_image(output_base + "/radial_difference.jpg", mat_rad_corr - mat0)
 
-# Save the unwarped image.
-io.save_image(output_base + "/F_R_hazcam_unwarped.png", img_corrected)
+# -------------------------------------
+# For perspective distortion correction
+# -------------------------------------
+
+# Generate source points and target points to calculate coefficients of a perspective model
+source_points, target_points = proc.generate_source_target_perspective_points(list_uhor_lines, list_uver_lines,
+                                                                              equal_dist=True, scale="mean",
+                                                                              optimizing=False)
+# # Optional: generate non-perspective grid-lines for checking
+# hor_lines_pers_corr, ver_lines_pers_corr = proc.generate_undistorted_perspective_lines(list_uhor_lines, list_uver_lines,
+#                                                                               equal_dist=True, scale="mean",
+#                                                                               optimizing=False)
+
+# Calculate perspective coefficients:
+pers_coef = proc.calc_perspective_coefficients(source_points, target_points, mapping="backward")
+image_pers_corr = post.correct_perspective_image(mat_rad_corr, pers_coef)
+# Save results
+np.savetxt(output_base + "/perspective_coefficients.txt", np.transpose([pers_coef]))
+io.save_image(output_base + "/image_radial_perspective_corrected.jpg", image_pers_corr)
+io.save_image(output_base + "/perspective_difference.jpg", image_pers_corr - mat_rad_corr)
