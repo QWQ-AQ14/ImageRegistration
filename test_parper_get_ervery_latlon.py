@@ -47,7 +47,7 @@ def get_xmp_info(img_path):
 if __name__ == "__main__":
     #读取两张图像
     img1_path = './images/DJI_20210803111304_0324_T.JPG'
-    img2_path = './images/DJI_20210803105452_0067_W.JPG'
+    img2_path = './images/DJI_20210803111219_0313_W.JPG'
     img1 = cv2.imread(img1_path)
     img2 = cv2.imread(img2_path)
 
@@ -65,22 +65,23 @@ if __name__ == "__main__":
     #可见光传感器宽度 8.8 x 6.6mm
     # The camera sensor is 1/2.3 inch and image size is 6.3116*4.7492mm.
     sendor_w_vis = 6.3116
-    h = img1_xmp['Altitude']
+    sendor_h_vis = 4.7492
+    h = img2_xmp['Altitude']
     #地面分辨率 m/pixel
     # gsd_ir = (sendor_w_ir * h ) / (float(img1_xmp['FocalLength']) * float(img1_xmp['ExifImageWidth']))
-    gsd_vis = (sendor_w_vis * h ) / (float(img2_xmp['FocalLength']) * float(img2_xmp['ImageWidth']))
-    gsd = gsd_vis
-    print(gsd)
+    gsd_vis_w = (sendor_w_vis * h ) / (float(img2_xmp['FocalLength']) * float(img2_xmp['ImageWidth']))
+    gsd_vis_h = (sendor_h_vis * h) / (float(img2_xmp['FocalLength']) * float(img2_xmp['ImageHeight']))
+
 
     #中心点坐标
     center_point = np.array([img2.shape[1]/2,img2.shape[0]/2])
     #左上角坐标
-    left_point = np.array([0,0])
+    left_point = np.array([1036.3905,852.8012])
 
     #像素差 距离中心点的实际距离
 
     sub = center_point - left_point
-    sub = sub * np.array([gsd,gsd])
+    sub = sub * np.array([gsd_vis_w,gsd_vis_h])
     offset_lat = 9.791212210578413e-06
     offset_lon = 1.1660749935330442e-05
     # 纬度
@@ -92,4 +93,7 @@ if __name__ == "__main__":
     # # 经度
     # lon = coords1[1] + sub[0] / 23.6/3600
     print(lat,lon)
+    target_lat = 40.49333256
+    target_lon = 95.70826548
     print(lat - coords2[0],lon - coords2[1])
+    print(lat - target_lat,lon - target_lon)
