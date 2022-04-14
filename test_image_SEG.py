@@ -59,12 +59,12 @@ def get_mask(img,hsv_range):
     upper = np.array([hsv_range[1], hsv_range[3], hsv_range[5]])
     mask = cv2.inRange(imgHSV, lower, upper)
     # 滤波去除噪声, 小于5个像素的区域直接移除
-    viewImage(mask)
+    # viewImage(mask)
     #不腐蚀之前 可分割小组件
     kernel = np.ones((3, 3), np.uint8)
     #腐蚀 是缩小
     mask = cv2.erode(mask, kernel, 2)
-    viewImage(mask)
+    # viewImage(mask)
     #膨胀
     mask = cv2.dilate(mask, kernel, iterations=6)
     viewImage(mask)
@@ -145,24 +145,26 @@ def get_seg(mask,img):
                     cv2.FONT_HERSHEY_SIMPLEX,
                     2, (255, 0, 255), 2)
         big_num += 1
-    viewImage(draw_img)
+    # viewImage(draw_img)
     print(big_num)
 
     return draw_img
 
-def get_label_single_moduleimg(mask,img):
+def get_label_single_moduleimg_show(mask,img):
+    # 显示并筛选出所有标记的组件
     grat_img = rgb2gray(img)
     label_im = label(mask)
     regions = regionprops(label_im)
     imshow(label_im)
-    # 显示区域数据
-    properties = ['area', 'convex_area', 'bbox_area', 'extent', 'mean_intensity',
-                  'solidity', 'eccentricity', 'orientation']
-    pd.DataFrame(regionprops_table(label_im, grat_img, properties=properties))
-
+    # --------------------显示区域数据--------------------
+    # properties = ['area', 'convex_area', 'bbox_area', 'extent', 'mean_intensity',
+    #               'solidity', 'eccentricity', 'orientation']
+    # pd.DataFrame(regionprops_table(label_im, grat_img, properties=properties))
+    #---------------------筛选-----------------------------------
     masks = []
     bbox = []
     list_of_index = []
+    list_of_region = []
     for num, x in enumerate(regions):
         area = x.area  # 区域像素数量
         convex_area = x.convex_area
@@ -171,6 +173,7 @@ def get_label_single_moduleimg(mask,img):
             masks.append(regions[num].convex_image)
             bbox.append(regions[num].bbox)
             list_of_index.append(num)
+            list_of_region.append(x)
     count = len(masks)
     print(count)
 
@@ -197,7 +200,26 @@ def get_label_single_moduleimg(mask,img):
 
     plt.show()
 # 替换 plt.show() 保存文件
+    return list_of_region
 
+def get_label_single_module_index(mask,img,taget_pixel):
+    #根据目标像素坐标的值 求得所在组串的编号值 并显示所在的组串
+    label_im = label(mask)
+    regions = regionprops(label_im)
+    for num, x in enumerate(regions):
+        if x.area < 100000:
+            continue
+        bbox = x.bbox
+        if taget_pixel[0] > bbox[1] and taget_pixel[0] < bbox[3] and taget_pixel[1] > bbox[0] and taget_pixel[1] < bbox[2]:
+            #显示出目标像素点所在的组串
+            rgb_mask = (label_im == num + 1).astype(int)
+            red = img[:, :, 0] * rgb_mask
+            green = img[:, :, 1] * rgb_mask
+            blue = img[:, :, 2] * rgb_mask
+            image = np.dstack([red, green, blue])
+            imshow(image)
+            plt.show()
+            return num
 if __name__ == "__main__" :
     sigle_img_path = './images/DJI_20210803111219_0313_W.JPG'
     mosaic_img_path = './result/output_crop_raster_0313.tif'
@@ -210,6 +232,14 @@ if __name__ == "__main__" :
     # mosaic_mask = get_HSV(mosaic_img)
     mosaic_seg_img = get_seg(mosaic_mask,mosaic_img)
     # 通过regionprops函数标注分割区域
-    get_label_single_moduleimg(mosaic_mask,mosaic_img)
+    # mosaic_list_of_region = get_label_single_moduleimg_show(mosaic_mask,mosaic_img)
+
+    #目标像素点
+    target_pixel = [500,101]
+    # 求出像素点所在的组串位置
+    module_num = get_label_single_module_index(mosaic_mask,mosaic_img,target_pixel)
+    print('缺陷点所在组串编号为：',module_num)
+
+
 
 
