@@ -128,15 +128,16 @@ def get_seg(mask,img):
         #拼接图的筛选
         if ares < 100000 or rect[1][0] / rect[1][1] >0.5:  # 过滤面积小于50000的形状
             continue
+        #计算轮廓中心点坐标
+        M = cv2.moments(contour)
+        cx = int(M['m10'] / M['m00'])
+        cy = int(M['m01'] / M['m00'])
         x, y, w, h = cv2.boundingRect(contour)
         box = np.int0(cv2.boxPoints(rect))
         cv2.drawContours(draw_img, [box], 0, (0, 255, 0), 2)
         cv2.putText(draw_img, "#{}".format(ares), (x + int(w / 2), y + int(h / 2)),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     2, (255, 0, 255), 2)
-        coords = np.array2string(contour)
-        # 将轮廓信息写入文件夹
-        open(path + 'contour_%d.txt' % big_num, "w").write(coords)
         big_num += 1
     viewImage(draw_img)
     print(big_num)
