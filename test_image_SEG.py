@@ -121,6 +121,7 @@ def get_seg(mask,img):
     draw_img = img.copy()
     contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     big_num = 1  # 组件的数量
+    path = './text/' #保存轮廓信息的路径
     for i, contour in enumerate(contours):
         ares = cv2.contourArea(contour)
         rect = cv2.minAreaRect(contour)
@@ -133,10 +134,16 @@ def get_seg(mask,img):
         cv2.putText(draw_img, "#{}".format(ares), (x + int(w / 2), y + int(h / 2)),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     2, (255, 0, 255), 2)
+        coords = np.array2string(contour)
+        # 将轮廓信息写入文件夹
+        open(path + 'contour_%d.txt' % big_num, "w").write(coords)
         big_num += 1
     viewImage(draw_img)
     print(big_num)
+
     return draw_img
+
+
 if __name__ == "__main__" :
     sigle_img_path = './images/DJI_20210803111219_0313_W.JPG'
     mosaic_img_path = './result/output_crop_raster_0313.tif'
