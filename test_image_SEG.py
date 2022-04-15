@@ -152,10 +152,11 @@ def get_seg(mask,img):
 
 def get_label_single_moduleimg_show(mask,img):
     # 显示并筛选出所有标记的组件
-    grat_img = rgb2gray(img)
+    draw_img = img.copy()
+    gray_img = rgb2gray(draw_img)
     label_im = label(mask)
     regions = regionprops(label_im)
-    imshow(label_im)
+    # imshow(label_im)
     # --------------------显示区域数据--------------------
     # properties = ['area', 'convex_area', 'bbox_area', 'extent', 'mean_intensity',
     #               'solidity', 'eccentricity', 'orientation']
@@ -169,7 +170,7 @@ def get_label_single_moduleimg_show(mask,img):
         area = x.area  # 区域像素数量
         convex_area = x.convex_area
         if (num != 0 and (area > 100000)):
-            print(convex_area / area)  # 大部分大于一 1.01~ 1.04
+            # print(convex_area / area)  # 大部分大于一 1.01~ 1.04
             masks.append(regions[num].convex_image)
             bbox.append(regions[num].bbox)
             list_of_index.append(num)
@@ -177,33 +178,34 @@ def get_label_single_moduleimg_show(mask,img):
     count = len(masks)
     print(count)
 
-    # 画出所划分的轮廓部分
-    fig, ax = plt.subplots(2, int(count / 2), figsize=(15, 8))
-    for axis, box, mask in zip(ax.flatten(), bbox, masks):
-        red = img[:, :, 0][box[0]:box[2], box[1]:box[3]] * mask
-        green = img[:, :, 1][box[0]:box[2], box[1]:box[3]] * mask
-        blue = img[:, :, 2][box[0]:box[2], box[1]:box[3]] * mask
-        image = np.dstack([red, green, blue])
-        axis.imshow(image)
-    plt.tight_layout()
-    plt.show()
-    # plt.savefig('fig.png', bbox_inches='tight')  # 替换 plt.show() 保存文件
-    #去除背景
-    rgb_mask = np.zeros_like(label_im)
-    for x in list_of_index:
-        rgb_mask += (label_im == x + 1).astype(int)
-    red = img[:, :, 0] * rgb_mask
-    green = img[:, :, 1] * rgb_mask
-    blue = img[:, :, 2] * rgb_mask
-    image = np.dstack([red, green, blue])
-    imshow(image)
-
-    plt.show()
+    # -------------------画出所划分的轮廓部分-------------------
+    # fig, ax = plt.subplots(2, int(count / 2), figsize=(15, 8))
+    # for axis, box, mask in zip(ax.flatten(), bbox, masks):
+    #     red = draw_img[:, :, 0][box[0]:box[2], box[1]:box[3]] * mask
+    #     green = draw_img[:, :, 1][box[0]:box[2], box[1]:box[3]] * mask
+    #     blue = draw_img[:, :, 2][box[0]:box[2], box[1]:box[3]] * mask
+    #     image = np.dstack([red, green, blue])
+    #     axis.imshow(image)
+    # plt.tight_layout()
+    # plt.show()
+    # # plt.savefig('fig.png', bbox_inches='tight')  # 替换 plt.show() 保存文件
+    # #去除背景
+    # rgb_mask = np.zeros_like(label_im)
+    # for x in list_of_index:
+    #     rgb_mask += (label_im == x + 1).astype(int)
+    # red = draw_img[:, :, 0] * rgb_mask
+    # green = draw_img[:, :, 1] * rgb_mask
+    # blue = draw_img[:, :, 2] * rgb_mask
+    # image = np.dstack([red, green, blue])
+    # imshow(image)
+    #
+    # plt.show()
 # 替换 plt.show() 保存文件
     return list_of_region
 
 def get_label_single_module_index(mask,img,taget_pixel):
     #根据目标像素坐标的值 求得所在组串的编号值 并显示所在的组串
+    draw_img = img.copy()
     label_im = label(mask)
     regions = regionprops(label_im)
     for num, x in enumerate(regions):
@@ -212,33 +214,52 @@ def get_label_single_module_index(mask,img,taget_pixel):
         bbox = x.bbox
         if taget_pixel[0] > bbox[1] and taget_pixel[0] < bbox[3] and taget_pixel[1] > bbox[0] and taget_pixel[1] < bbox[2]:
             #显示出目标像素点所在的组串
-            rgb_mask = (label_im == num + 1).astype(int)
-            red = img[:, :, 0] * rgb_mask
-            green = img[:, :, 1] * rgb_mask
-            blue = img[:, :, 2] * rgb_mask
-            image = np.dstack([red, green, blue])
-            imshow(image)
-            plt.show()
+            # rgb_mask = (label_im == num + 1).astype(int)
+            # red = draw_img[:, :, 0] * rgb_mask
+            # green = draw_img[:, :, 1] * rgb_mask
+            # blue = draw_img[:, :, 2] * rgb_mask
+            # image = np.dstack([red, green, blue])
+            # imshow(image)
+            # plt.show()
             return num
 if __name__ == "__main__" :
     sigle_img_path = './images/DJI_20210803111219_0313_W.JPG'
     mosaic_img_path = './result/output_crop_raster_0313.tif'
     sigle_img = cv2.imread(sigle_img_path)
     mosaic_img = cv2.imread(mosaic_img_path)
-    # sigle_mask = get_mask(sigle_img, hsv_range=[55, 135, 45, 255, 70, 255])
+    sigle_mask = get_mask(sigle_img, hsv_range=[55, 135, 45, 255, 70, 255])
     #差别主要在于亮度值v
     mosaic_mask = get_mask(mosaic_img, hsv_range=[55, 135, 45, 255, 90, 255])
     #自适应获取阈值得到mask图像
     # mosaic_mask = get_HSV(mosaic_img)
-    mosaic_seg_img = get_seg(mosaic_mask,mosaic_img)
-    # 通过regionprops函数标注分割区域
-    # mosaic_list_of_region = get_label_single_moduleimg_show(mosaic_mask,mosaic_img)
-
+    mosaic_seg_img = get_seg(sigle_mask,sigle_img)
+    # -------------通过regionprops函数标注分割区域-------------------
+    mosaic_list_of_region = get_label_single_moduleimg_show(mosaic_mask,mosaic_img)
+    sigle_list_of_region = get_label_single_moduleimg_show(sigle_mask, sigle_img)
     #目标像素点
-    target_pixel = [500,101]
+    target_pixel = [1224,785]
     # 求出像素点所在的组串位置
-    module_num = get_label_single_module_index(mosaic_mask,mosaic_img,target_pixel)
+    module_num = get_label_single_module_index(sigle_mask,sigle_img,target_pixel)
     print('缺陷点所在组串编号为：',module_num)
+    for num, x in enumerate(sigle_list_of_region):
+        box =x.bbox
+        template = sigle_img[box[0]:box[2], box[1]:box[3]]
+        imshow(template)
+        plt.show()
+        result = cv2.matchTemplate(mosaic_img,template, cv2.TM_CCOEFF_NORMED, mosaic_mask)
+        # 使用cv2.minMaxLoc来查找传入结果矩阵的最大元素所在位置
+        (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(result)
+        # ＃确定起点和终点的（x，y）坐标边界框
+        (startX, startY) = maxLoc
+        endX = startX + mosaic_img.shape[1]
+        endY = startY + mosaic_img.shape[0]
+        # 在图像上绘制边框
+        cv2.rectangle(mosaic_img, (startX, startY), (endX, endY), (255, 0, 0), 3)
+        # ＃显示输出图像
+        viewImage(mosaic_img)
+
+
+
 
 
 
