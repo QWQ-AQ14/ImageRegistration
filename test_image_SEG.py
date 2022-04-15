@@ -213,20 +213,27 @@ def get_label_single_module_index(mask,img,taget_pixel):
             continue
         bbox = x.bbox
         if taget_pixel[0] > bbox[1] and taget_pixel[0] < bbox[3] and taget_pixel[1] > bbox[0] and taget_pixel[1] < bbox[2]:
-            #显示出目标像素点所在的组串
-            # rgb_mask = (label_im == num + 1).astype(int)
-            # red = draw_img[:, :, 0] * rgb_mask
-            # green = draw_img[:, :, 1] * rgb_mask
-            # blue = draw_img[:, :, 2] * rgb_mask
-            # image = np.dstack([red, green, blue])
-            # imshow(image)
-            # plt.show()
+            plt_target_module(draw_img,mask,num)
             return num
+
+def plt_target_module(img,mask,num):
+    # 显示出目标像素点所在的组串
+    label_im = label(mask)
+    draw_img = img.copy()
+    rgb_mask = (label_im == num + 1).astype(int)
+    red = draw_img[:, :, 0] * rgb_mask
+    green = draw_img[:, :, 1] * rgb_mask
+    blue = draw_img[:, :, 2] * rgb_mask
+    image = np.dstack([red, green, blue])
+    imshow(image)
+    plt.show()
+
 if __name__ == "__main__" :
     sigle_img_path = './images/DJI_20210803111219_0313_W.JPG'
     mosaic_img_path = './result/output_crop_raster_0313.tif'
     sigle_img = cv2.imread(sigle_img_path)
     mosaic_img = cv2.imread(mosaic_img_path)
+    #   ----------------阈值分割
     sigle_mask = get_mask(sigle_img, hsv_range=[55, 135, 45, 255, 70, 255])
     #差别主要在于亮度值v
     mosaic_mask = get_mask(mosaic_img, hsv_range=[55, 135, 45, 255, 90, 255])
@@ -241,22 +248,29 @@ if __name__ == "__main__" :
     # 求出像素点所在的组串位置
     module_num = get_label_single_module_index(sigle_mask,sigle_img,target_pixel)
     print('缺陷点所在组串编号为：',module_num)
-    for num, x in enumerate(sigle_list_of_region):
-        box =x.bbox
+    #对应组件列表
+    resDit = {}
+    for num1, x1 in enumerate(sigle_list_of_region):
+        box =x1.bbox
+        coor1 = x1.coords
         template = sigle_img[box[0]:box[2], box[1]:box[3]]
-        imshow(template)
-        plt.show()
-        result = cv2.matchTemplate(mosaic_img,template, cv2.TM_CCOEFF_NORMED, mosaic_mask)
-        # 使用cv2.minMaxLoc来查找传入结果矩阵的最大元素所在位置
-        (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(result)
-        # ＃确定起点和终点的（x，y）坐标边界框
-        (startX, startY) = maxLoc
-        endX = startX + mosaic_img.shape[1]
-        endY = startY + mosaic_img.shape[0]
-        # 在图像上绘制边框
-        cv2.rectangle(mosaic_img, (startX, startY), (endX, endY), (255, 0, 0), 3)
-        # ＃显示输出图像
-        viewImage(mosaic_img)
+        plt_target_module(sigle_img, sigle_mask, num1)
+        min_ret = 999
+        min_id = 0
+        for num2, x2 in enumerate(mosaic_list_of_region):
+            coor2 = x2.coords
+            ret = cv2.matchShapes(coor1, coor2, 1, 0.0)
+            # ret越小，越相似
+            if ret < min_ret:
+                min_ret = ret
+                min_id = num2
+        print(min_id, min_ret)
+        resDit[num1] =min_id
+        plt_target_module(mosaic_img,mosaic_mask,min_id)
+        a = 1
+    print('1')
+
+
 
 
 
