@@ -169,7 +169,7 @@ def get_label_single_moduleimg_show(mask,img):
     for num, x in enumerate(regions):
         area = x.area  # 区域像素数量
         convex_area = x.convex_area
-        if (num != 0 and (area > 100000)):
+        if (num != 0 and (area > 50000)):
             # print(convex_area / area)  # 大部分大于一 1.01~ 1.04
             masks.append(regions[num].convex_image)
             bbox.append(regions[num].bbox)
@@ -177,33 +177,11 @@ def get_label_single_moduleimg_show(mask,img):
             list_of_region.append(x)
     count = len(masks)
     print(count)
+    plot_all_seg_module(draw_img,mask,regions)
+    return regions
 
-    # -------------------画出所划分的轮廓部分-------------------
-    # fig, ax = plt.subplots(2, int(count / 2), figsize=(15, 8))
-    # for axis, box, mask in zip(ax.flatten(), bbox, masks):
-    #     red = draw_img[:, :, 0][box[0]:box[2], box[1]:box[3]] * mask
-    #     green = draw_img[:, :, 1][box[0]:box[2], box[1]:box[3]] * mask
-    #     blue = draw_img[:, :, 2][box[0]:box[2], box[1]:box[3]] * mask
-    #     image = np.dstack([red, green, blue])
-    #     axis.imshow(image)
-    # plt.tight_layout()
-    # plt.show()
-    # # plt.savefig('fig.png', bbox_inches='tight')  # 替换 plt.show() 保存文件
-    # #去除背景
-    # rgb_mask = np.zeros_like(label_im)
-    # for x in list_of_index:
-    #     rgb_mask += (label_im == x + 1).astype(int)
-    # red = draw_img[:, :, 0] * rgb_mask
-    # green = draw_img[:, :, 1] * rgb_mask
-    # blue = draw_img[:, :, 2] * rgb_mask
-    # image = np.dstack([red, green, blue])
-    # imshow(image)
-    #
-    # plt.show()
-# 替换 plt.show() 保存文件
-    return list_of_region
 
-def get_label_single_module_index(mask,img,taget_pixel):
+def get_label_single_module_index(img,mask,taget_pixel):
     #根据目标像素坐标的值 求得所在组串的编号值 并显示所在的组串
     draw_img = img.copy()
     label_im = label(mask)
@@ -214,20 +192,68 @@ def get_label_single_module_index(mask,img,taget_pixel):
         bbox = x.bbox
         if taget_pixel[0] > bbox[1] and taget_pixel[0] < bbox[3] and taget_pixel[1] > bbox[0] and taget_pixel[1] < bbox[2]:
             plt_target_module(draw_img,mask,num)
-            return num
+            return num,regions[num].centroid
+
+def plot_all_seg_module(img,mask,regions):
+    masks = []
+    bbox = []
+    draw_img = img.copy()
+    label_im = label(mask)
+    list_of_index = []
+    for num, x in enumerate(regions):
+        masks.append(regions[num].convex_image)
+        bbox.append(regions[num].bbox)
+        list_of_index.append(num)
+
+    # -------------------画出所划分的每个组件 分两列展示-------------------
+    # count = len(masks)
+    # fig, ax = plt.subplots(2, int(count / 2), figsize=(15, 8))
+    # for axis, box, mask in zip(ax.flatten(), bbox, masks):
+    #     red = draw_img[:, :, 0][box[0]:box[2], box[1]:box[3]] * mask
+    #     green = draw_img[:, :, 1][box[0]:box[2], box[1]:box[3]] * mask
+    #     blue = draw_img[:, :, 2][box[0]:box[2], box[1]:box[3]] * mask
+    #     image = np.dstack([red, green, blue])
+    #     axis.imshow(image)
+    # plt.tight_layout()
+    # plt.show()
+    # plt.savefig('fig.png', bbox_inches='tight')  # 替换 plt.show() 保存文件
+    #------------------去除背景展示所有组件在原图中的位置--------
+    rgb_mask = np.zeros_like(label_im)
+    for x in list_of_index:
+        rgb_mask += (label_im == x + 1).astype(int)
+    red = draw_img[:, :, 0] * rgb_mask
+    green = draw_img[:, :, 1] * rgb_mask
+    blue = draw_img[:, :, 2] * rgb_mask
+    image = np.dstack([red, green, blue])
+    # cv2.imwrite('single0313.png',image)
+    # imshow(image)
+    plt.imshow(image)
+    plt.show()
 
 def plt_target_module(img,mask,num):
     # 显示出目标像素点所在的组串
     label_im = label(mask)
     draw_img = img.copy()
+    rgb_mask = np.zeros_like(label_im)
     rgb_mask = (label_im == num + 1).astype(int)
     red = draw_img[:, :, 0] * rgb_mask
     green = draw_img[:, :, 1] * rgb_mask
     blue = draw_img[:, :, 2] * rgb_mask
     image = np.dstack([red, green, blue])
-    imshow(image)
+    plt.imshow(image)
     plt.show()
 
+# 计算欧式距离
+def eucldist_forloop(coords1, coords2):
+
+    """ Calculates the euclidean distance between 2 lists of coordinates. """
+    dist = 0
+
+    for (x, y) in zip(coords1, coords2):
+
+        dist += (x - y)**2
+
+    return dist**0.5
 if __name__ == "__main__" :
     sigle_img_path = './images/DJI_20210803111219_0313_W.JPG'
     mosaic_img_path = './result/output_crop_raster_0313.tif'
@@ -244,30 +270,22 @@ if __name__ == "__main__" :
     mosaic_list_of_region = get_label_single_moduleimg_show(mosaic_mask,mosaic_img)
     sigle_list_of_region = get_label_single_moduleimg_show(sigle_mask, sigle_img)
     #目标像素点
-    target_pixel = [1224,785]
+    target_pixel = [1583,776]
     # 求出像素点所在的组串位置
-    module_num = get_label_single_module_index(sigle_mask,sigle_img,target_pixel)
-    print('缺陷点所在组串编号为：',module_num)
+    module_num,module_centroid = get_label_single_module_index(sigle_img,sigle_mask,target_pixel)
+    print('缺陷点所在组串编号为：',module_num) #5
     #对应组件列表
     resDit = {}
-    for num1, x1 in enumerate(sigle_list_of_region):
-        box =x1.bbox
-        coor1 = x1.coords
-        template = sigle_img[box[0]:box[2], box[1]:box[3]]
-        plt_target_module(sigle_img, sigle_mask, num1)
-        min_ret = 999
-        min_id = 0
-        for num2, x2 in enumerate(mosaic_list_of_region):
-            coor2 = x2.coords
-            ret = cv2.matchShapes(coor1, coor2, 1, 0.0)
-            # ret越小，越相似
-            if ret < min_ret:
-                min_ret = ret
-                min_id = num2
-        print(min_id, min_ret)
-        resDit[num1] =min_id
-        plt_target_module(mosaic_img,mosaic_mask,min_id)
-        a = 1
+    # 3.创建计算距离对象
+    min_dis = 9999
+    mosaic_num = 0
+    for num2, x2 in enumerate(mosaic_list_of_region):
+        dis = eucldist_forloop(module_centroid,x2.centroid)
+        if dis < min_dis:
+            min_dis = dis
+            mosaic_num = num2
+    print(mosaic_num) #9
+    plt_target_module(mosaic_img,mosaic_mask,mosaic_num)
     print('1')
 
 
