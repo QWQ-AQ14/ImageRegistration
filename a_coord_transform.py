@@ -1,5 +1,8 @@
+import cv2
 from osgeo import gdal,osr
 from exif import Image
+
+
 def lonlat2pixel(ds,lon,lat):
     # 创建目标空间参考
     srs = osr.SpatialReference()
@@ -64,19 +67,20 @@ def pixel2latlon(ds,x,y):
 
 def pixel2geocoord(ds,pixel_x,pixel_y):
     gt = ds.GetGeoTransform()
-    # 像素坐标转换为地理空间坐标系
+    #gt[1] :水平空间分辨率 gt[5] :垂直空间分辨率 pixel size
+    # 像素坐标转换为投影坐标系projection coordinates
     # col = 996.5
     # row = 782
     geo_x = (pixel_x * gt[1]) + gt[0]
     geo_y = (pixel_y * gt[5]) + gt[3]
     return (geo_x,geo_y)
-def center_point_four(ds,center_x,center_y,offset):
+def center_point_four(ds,center_x,center_y,x_offset,y_offset):
     #offset 需要裁剪的偏移量
     # 输入像素点中心坐标
-    upper_left_x = center_x - offset
-    upper_left_y = center_y - offset
-    lower_right_x = center_x + offset
-    lower_right_y = center_y + offset
+    upper_left_x = center_x - x_offset
+    upper_left_y = center_y - y_offset
+    lower_right_x = center_x + x_offset
+    lower_right_y = center_y + y_offset
     (upper_left_geo_x, upper_left_geo_y) = pixel2geocoord(ds,upper_left_x,upper_left_y)
     (lower_right_geo_x, lower_right_geo_y) = pixel2geocoord(ds, lower_right_x, lower_right_y)
     return (upper_left_geo_x, upper_left_geo_y,lower_right_geo_x, lower_right_geo_y)
@@ -111,17 +115,18 @@ if __name__ == "__main__":
     # 整图
     img1_path = './images/GS.tif'
     # 单幅图
-    img2_path = './images/DJI_20210803111145_0305_W.JPG'
+    img2_path = './images/DJI_20210803105452_0067_W.JPG'
+    img2=cv2.imread(img2_path)
     # Open tif file
     ds = gdal.Open(img1_path)
     #获取单幅图的经纬度信息
     lat_lon = image_coordinates(img2_path)
-    # lon,lat = pixel2latlon(ds,996.5,782)
+    lon,lat = pixel2latlon(ds,996.5,782)
     # lat_lon = [40.49348002,95.70736002]
     x,y = lonlat2pixel(ds,lat_lon[1],lat_lon[0])
     # 中心点坐标 x = 263853.4085 y = 4238056.654
-    (upper_left_geo_x, upper_left_geo_y, lower_right_geo_x, lower_right_geo_y) = center_point_four(ds,x,y,2000)
+    (upper_left_geo_x, upper_left_geo_y, lower_right_geo_x, lower_right_geo_y) = center_point_four(ds,x,y,img2.shape[1]/2,img2.shape[0]/2)
     window =(upper_left_geo_x, upper_left_geo_y, lower_right_geo_x, lower_right_geo_y)
-    #根据地理空间坐标裁剪出对应区域
-    gdal.Translate('output_crop_raster.tif', './images/GS.tif', projWin=window)
+    #根据地理空间坐标裁剪出对应区域 截出来的图与单幅图有180度旋转偏差
+    gdal.Translate('./result/output_crop_raster_0067.tif', './images/GS.tif', projWin=window)
     print(lat_lon)
