@@ -1,7 +1,7 @@
 import cv2
 from osgeo import gdal,osr
 from exif import Image
-
+import matplotlib.image as mpimg
 
 def lonlat2pixel(ds,lon,lat):
     # 创建目标空间参考
@@ -130,3 +130,10 @@ if __name__ == "__main__":
     #根据地理空间坐标裁剪出对应区域 截出来的图与单幅图有180度旋转偏差
     gdal.Translate('./result/output_crop_raster_0067.tif', './images/GS.tif', projWin=window)
     print(lat_lon)
+    #显示TIF文件
+    dataset = gdal.Open('./images/GF2_SAME.tif', gdal.GA_ReadOnly)
+    # Note GetRasterBand() takes band no. starting from 1 not 0
+    band = dataset.GetRasterBand(1)
+    arr = band.ReadAsArray()
+    plt.imshow(arr)
+    plt.show()
